@@ -94,21 +94,38 @@ function buildEditorDecorations(
     }
 
     if (definitionMatch && (lastLineWasTerm || lastLineWasDefinition)) {
+      const definitionMeta = getEditorDefinitionLineMeta(line.text)
       const markerStart = line.from
-      const markerEnd = line.from + definitionMatch[0].length
+      const markerEnd =
+        line.from +
+        definitionMeta.definitionMarkerLength +
+        definitionMeta.listMarkerLength
       const markerTouched = selection.ranges.some(
         (range) => range.from <= markerEnd && range.to >= markerStart,
       )
+      const lineClasses = [
+        definitionMatch[1].length > 0
+          ? 'ob-dl-editor-dd-indent'
+          : 'ob-dl-editor-dd',
+      ]
+
+      if (definitionMeta.listType === 'unordered') {
+        lineClasses.push('ob-dl-editor-dd-list', 'ob-dl-editor-dd-list-unordered')
+      }
+
+      if (definitionMeta.listType === 'ordered') {
+        lineClasses.push('ob-dl-editor-dd-list', 'ob-dl-editor-dd-list-ordered')
+      }
 
       builder.add(
         line.from,
         line.from,
         Decoration.line({
           attributes: {
-            class:
-              definitionMatch[1].length > 0
-                ? 'ob-dl-editor-dd-indent'
-                : 'ob-dl-editor-dd',
+            class: lineClasses.join(' '),
+            ...(definitionMeta.listType === 'ordered'
+              ? { 'data-ob-dl-list-marker': definitionMeta.listMarkerText }
+              : {}),
           },
         }),
       )
@@ -150,6 +167,43 @@ function buildEditorDecorations(
   }
 
   return builder.finish()
+}
+
+function getEditorDefinitionLineMeta(lineText) {
+  const definitionMatch = lineText.match(/^(\s*):\s+/)
+
+  if (!definitionMatch) {
+    return null
+  }
+
+  const content = lineText.slice(definitionMatch[0].length)
+  const unorderedMatch = content.match(/^([-*+])\s+/)
+  const orderedMatch = content.match(/^(\d+\.)\s+/)
+
+  if (unorderedMatch) {
+    return {
+      definitionMarkerLength: definitionMatch[0].length,
+      listMarkerLength: unorderedMatch[0].length,
+      listMarkerText: unorderedMatch[1],
+      listType: 'unordered',
+    }
+  }
+
+  if (orderedMatch) {
+    return {
+      definitionMarkerLength: definitionMatch[0].length,
+      listMarkerLength: orderedMatch[0].length,
+      listMarkerText: orderedMatch[1],
+      listType: 'ordered',
+    }
+  }
+
+  return {
+    definitionMarkerLength: definitionMatch[0].length,
+    listMarkerLength: 0,
+    listMarkerText: '',
+    listType: null,
+  }
 }
 
 function *iterateDocumentLines(document) {
@@ -506,7 +560,9 @@ function splitParagraphIntoLines(paragraph) {
         }
 
         if (index < parts.length - 1) {
-          lines.push([])
+          if (lines.at(-1).length > 0) {
+            lines.push([])
+          }
         }
       }
 
@@ -514,14 +570,16 @@ function splitParagraphIntoLines(paragraph) {
     }
 
     if (child.nodeName === 'BR') {
-      lines.push([])
+      if (lines.at(-1).length > 0) {
+        lines.push([])
+      }
       continue
     }
 
     lines.at(-1).push(child.cloneNode(true))
   }
 
-  return lines
+  return lines.filter((line, index) => line.length > 0 || index === 0)
 }
 
 function trimLine(line) {
@@ -658,3 +716,4 @@ class DefinitionListPlugin extends PluginBase {
 module.exports = DefinitionListPlugin
 module.exports.DefinitionListPlugin = DefinitionListPlugin
 module.exports.transformRenderedDefinitionLists = transformRenderedDefinitionLists
+module.exports.getEditorDefinitionLineMeta = getEditorDefinitionLineMeta

@@ -38,6 +38,23 @@
   text-indent: 0;
 }
 
+.markdown-source-view.mod-cm6 .cm-line.ob-dl-editor-dd-list {
+  padding-inline-start: calc(var(--list-indent-editing) + 1.25em);
+  position: relative;
+}
+
+.markdown-source-view.mod-cm6 .cm-line.ob-dl-editor-dd-list-unordered::before {
+  content: "•";
+  inset-inline-start: var(--list-indent-editing);
+  position: absolute;
+}
+
+.markdown-source-view.mod-cm6 .cm-line.ob-dl-editor-dd-list-ordered::before {
+  content: attr(data-ob-dl-list-marker);
+  inset-inline-start: calc(var(--list-indent-editing) - 0.25em);
+  position: absolute;
+}
+
 .ob-dl-editor-marker-hidden {
   display: none;
 }

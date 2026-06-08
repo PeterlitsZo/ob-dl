@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 
 import mainModule from './main.js'
 
-const { transformRenderedDefinitionLists } = mainModule
+const { transformRenderedDefinitionLists, getEditorDefinitionLineMeta } = mainModule
 
 function render(html) {
   const dom = new JSDOM(`<div id="root">${html}</div>`)
@@ -130,6 +130,31 @@ describe('transformRenderedDefinitionLists', () => {
     ).toEqual(['面向连接的传输协议', '提供可靠传输'])
   })
 
+  it('supports rendered paragraphs with newline text nodes after br tags', () => {
+    const root = render(
+      '<div class="el-p"><p><code>FD</code><br>\n: 文件描述符，或者一个特殊标记。<br>\n: 一般常见的有：<br>\n: - 数字 <code>0</code>、<code>1</code>、<code>2</code>，表示标准输入、标准输出和标准错误。<br>\n: - <code>cwd</code> 表示当前工作目录。<br>\n: - <code>txt</code> 表示程序代码段。<br>\n: - <code>mem</code> 表示内存映射文件。</p></div>',
+    )
+
+    const definitionList = root.querySelector('dl')
+
+    expect(definitionList?.querySelector('dt')?.textContent).toBe('FD')
+    expect(
+      Array.from(definitionList?.querySelectorAll('dd p') ?? []).map(
+        (node) => node.textContent,
+      ),
+    ).toEqual(['文件描述符，或者一个特殊标记。', '一般常见的有：'])
+    expect(
+      Array.from(definitionList?.querySelectorAll('dd ul li') ?? []).map(
+        (node) => node.textContent,
+      ),
+    ).toEqual([
+      '数字 0、1、2，表示标准输入、标准输出和标准错误。',
+      'cwd 表示当前工作目录。',
+      'txt 表示程序代码段。',
+      'mem 表示内存映射文件。',
+    ])
+  })
+
   it('renders adjacent term-definition paragraphs as one definition list', () => {
     const root = render(
       [
@@ -187,5 +212,34 @@ describe('transformRenderedDefinitionLists', () => {
     expect(
       Array.from(root.querySelectorAll('dd ul li')).map((node) => node.textContent),
     ).toEqual(['更快', '更容易组合'])
+  })
+})
+
+describe('getEditorDefinitionLineMeta', () => {
+  it('detects unordered list items inside definition lines', () => {
+    expect(getEditorDefinitionLineMeta(': - item')).toEqual({
+      definitionMarkerLength: 2,
+      listMarkerLength: 2,
+      listMarkerText: '-',
+      listType: 'unordered',
+    })
+  })
+
+  it('detects ordered list items inside definition lines', () => {
+    expect(getEditorDefinitionLineMeta(': 2. item')).toEqual({
+      definitionMarkerLength: 2,
+      listMarkerLength: 3,
+      listMarkerText: '2.',
+      listType: 'ordered',
+    })
+  })
+
+  it('returns plain definitions without list metadata', () => {
+    expect(getEditorDefinitionLineMeta(': plain text')).toEqual({
+      definitionMarkerLength: 2,
+      listMarkerLength: 0,
+      listMarkerText: '',
+      listType: null,
+    })
   })
 })
