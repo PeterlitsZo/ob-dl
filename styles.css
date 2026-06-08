@@ -22,3 +22,22 @@
 .ob-dl-definition-list > dd > :last-child {
   margin-bottom: 0;
 }
+
+.ob-dl-editor-dt {
+  font-weight: 600;
+  padding-top: var(--list-spacing);
+}
+
+.markdown-source-view.mod-cm6 .cm-line.ob-dl-editor-dd,
+.markdown-source-view.mod-cm6 .cm-line.ob-dl-editor-dd-indent {
+  padding-inline-start: var(--list-indent-editing);
+  padding-bottom: var(--list-spacing);
+}
+
+.markdown-source-view.mod-cm6 .cm-line.ob-dl-editor-dd-indent {
+  text-indent: 0;
+}
+
+.ob-dl-editor-marker-hidden {
+  display: none;
+}

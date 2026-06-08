@@ -1,4 +1,5 @@
 const PluginBase = loadPluginBase()
+const editorExtensionFactory = loadEditorExtensionFactory()
 
 function loadPluginBase() {
   try {
@@ -8,12 +9,243 @@ function loadPluginBase() {
   }
 }
 
+function loadEditorExtensionFactory() {
+  try {
+    const { EditorView, Decoration, ViewPlugin } = require('@codemirror/view')
+    const { RangeSetBuilder } = require('@codemirror/state')
+
+    return function createEditorExtension() {
+      return ViewPlugin.fromClass(
+        class {
+          constructor(view) {
+            this.decorations = buildEditorDecorations(
+              view,
+              EditorView,
+              Decoration,
+              RangeSetBuilder,
+            )
+          }
+
+          update(update) {
+            if (
+              update.docChanged ||
+              update.viewportChanged ||
+              update.selectionSet
+            ) {
+              this.decorations = buildEditorDecorations(
+                update.view,
+                EditorView,
+                Decoration,
+                RangeSetBuilder,
+              )
+            }
+          }
+        },
+        {
+          decorations: (plugin) => plugin.decorations,
+        },
+      )
+    }
+  } catch {
+    return null
+  }
+}
+
 function transformRenderedDefinitionLists(root) {
   if (!root || !root.ownerDocument) {
     return
   }
 
+  if (transformStandaloneParagraphBlock(root)) {
+    return
+  }
+
+  transformSingleParagraphDefinitions(root)
   transformElement(root)
+}
+
+function buildEditorDecorations(
+  view,
+  EditorView,
+  Decoration,
+  RangeSetBuilder,
+) {
+  if (!isLivePreview(view)) {
+    return Decoration.none
+  }
+
+  const builder = new RangeSetBuilder()
+  const selection = view.state.selection
+  const lines = Array.from(iterateDocumentLines(view.state.doc))
+  let lastLineWasTerm = false
+  let lastLineWasDefinition = false
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]
+    const trimmed = line.text.trim()
+    const nextLine = lines[index + 1]?.text ?? ''
+    const definitionMatch = line.text.match(/^(\s*):\s+/)
+    const nextIsDefinition = /^(\s*):\s+/.test(nextLine)
+
+    if (trimmed.length === 0 || isExcludedEditorLine(trimmed)) {
+      lastLineWasTerm = false
+      lastLineWasDefinition = false
+      continue
+    }
+
+    if (definitionMatch && (lastLineWasTerm || lastLineWasDefinition)) {
+      const markerStart = line.from
+      const markerEnd = line.from + definitionMatch[0].length
+      const markerTouched = selection.ranges.some(
+        (range) => range.from <= markerEnd && range.to >= markerStart,
+      )
+
+      builder.add(
+        line.from,
+        line.from,
+        Decoration.line({
+          attributes: {
+            class:
+              definitionMatch[1].length > 0
+                ? 'ob-dl-editor-dd-indent'
+                : 'ob-dl-editor-dd',
+          },
+        }),
+      )
+      builder.add(
+        markerStart,
+        markerEnd,
+        Decoration.mark({
+          attributes: {
+            class: markerTouched
+              ? 'ob-dl-editor-marker'
+              : 'ob-dl-editor-marker-hidden',
+          },
+        }),
+      )
+
+      lastLineWasTerm = false
+      lastLineWasDefinition = true
+      continue
+    }
+
+    if (nextIsDefinition && !isExcludedEditorLine(trimmed)) {
+      builder.add(
+        line.from,
+        line.from,
+        Decoration.line({
+          attributes: {
+            class: 'ob-dl-editor-dt',
+          },
+        }),
+      )
+
+      lastLineWasTerm = true
+      lastLineWasDefinition = false
+      continue
+    }
+
+    lastLineWasTerm = false
+    lastLineWasDefinition = false
+  }
+
+  return builder.finish()
+}
+
+function *iterateDocumentLines(document) {
+  for (let number = 1; number <= document.lines; number += 1) {
+    yield document.line(number)
+  }
+}
+
+function isLivePreview(view) {
+  const sourceView = view.dom.closest('.markdown-source-view')
+
+  return sourceView?.classList.contains('is-live-preview') ?? false
+}
+
+function isExcludedEditorLine(line) {
+  return (
+    /^#+\s/.test(line) ||
+    /^\s*([-*+]|\d+\.)\s/.test(line) ||
+    line.startsWith('>') ||
+    line.startsWith('![') ||
+    /^(-{3,}|\*{3,}|_{3,})$/.test(line) ||
+    line.startsWith('[^') ||
+    line.startsWith('|') ||
+    line.startsWith('$$') ||
+    line.startsWith('^') ||
+    line.startsWith('```')
+  )
+}
+
+function transformStandaloneParagraphBlock(root) {
+  const block = getParagraphBlock(root)
+
+  if (!block) {
+    return false
+  }
+
+  const lines = splitParagraphIntoLines(block.paragraph)
+
+  if (!isSingleParagraphDefinitionList(lines)) {
+    return false
+  }
+
+  const definitionList = root.ownerDocument.createElement('dl')
+  definitionList.className = 'ob-dl-definition-list'
+
+  for (const child of createDefinitionPair(
+    root.ownerDocument,
+    trimLine(lines[0]),
+    lines.slice(1).map((line) => stripLinePrefix(trimLine(line))),
+  )) {
+    definitionList.appendChild(child)
+  }
+
+  if (root.tagName === 'P') {
+    root.replaceWith(definitionList)
+    return true
+  }
+
+  root.replaceChildren(definitionList)
+
+  return true
+}
+
+function transformSingleParagraphDefinitions(root) {
+  for (const paragraph of collectParagraphElements(root)) {
+    if (paragraph.closest('dl')) {
+      continue
+    }
+
+    const lines = splitParagraphIntoLines(paragraph)
+
+    if (!isSingleParagraphDefinitionList(lines)) {
+      continue
+    }
+
+    const definitionList = paragraph.ownerDocument.createElement('dl')
+    definitionList.className = 'ob-dl-definition-list'
+
+    for (const child of createDefinitionPair(
+      paragraph.ownerDocument,
+      trimLine(lines[0]),
+      lines.slice(1).map((line) => stripLinePrefix(trimLine(line))),
+    )) {
+      definitionList.appendChild(child)
+    }
+
+    paragraph.replaceWith(definitionList)
+  }
+}
+
+function collectParagraphElements(root) {
+  if (root.tagName === 'P') {
+    return [root]
+  }
+
+  return Array.from(root.querySelectorAll('p'))
 }
 
 function transformElement(element) {
@@ -416,6 +648,10 @@ class DefinitionListPlugin extends PluginBase {
     this.registerMarkdownPostProcessor((element) => {
       transformRenderedDefinitionLists(element)
     })
+
+    if (editorExtensionFactory) {
+      this.registerEditorExtension(editorExtensionFactory())
+    }
   }
 }
 
