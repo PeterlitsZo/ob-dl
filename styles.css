@@ -1,0 +1,24 @@
+.ob-dl-definition-list {
+  margin-block: 1em;
+}
+
+.ob-dl-definition-list > dt {
+  font-weight: 600;
+  margin-top: 0.75em;
+}
+
+.ob-dl-definition-list > dt:first-child {
+  margin-top: 0;
+}
+
+.ob-dl-definition-list > dd {
+  margin: 0.25em 0 0.75em 1.5em;
+}
+
+.ob-dl-definition-list > dd > :first-child {
+  margin-top: 0;
+}
+
+.ob-dl-definition-list > dd > :last-child {
+  margin-bottom: 0;
+}

@@ -1,0 +1,9 @@
+{
+  "id": "ob-dl",
+  "name": "Definition List",
+  "version": "0.0.1",
+  "minAppVersion": "1.5.0",
+  "description": "Render definition lists in Obsidian markdown previews.",
+  "author": "Peterlits",
+  "isDesktopOnly": false
+}

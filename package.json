@@ -1,0 +1,11 @@
+{
+  "name": "ob-dl",
+  "private": true,
+  "devDependencies": {
+    "jsdom": "^28.1.0",
+    "vitest": "^4.1.7"
+  },
+  "scripts": {
+    "test": "vitest run"
+  }
+}
